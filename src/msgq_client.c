@@ -1,9 +1,16 @@
+#include <signal.h> 
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/msg.h>
 #include <string.h>
+#include <unistd.h>
+#include <sys/types.h> 
 #include "key.h"
 #include "client.h"
+
+void sigquit() { 
+    exit(0); 
+} 
 
 int main(void) {
   struct my_msgbuf buf;
@@ -62,21 +69,43 @@ int main(void) {
       perror("msgsnd");
       continue;
     }
+    if (msgrcv(clt.cmsqid, &(buf.mtype), sizeof(buf), 0, 0) == -1) {
+      perror("msgrcv");
+      continue;
+    }
     if (buf.mtype == 1) {
       printf("%s\n", buf.mtext);
     } else if (buf.mtype == 2) {
+      sscanf(buf.mtext, "%d$%s", &(buf.gid), buf.mtext);
       printf("%s\n", buf.mtext);
 
       // start communication with server (chat mode)
-      buf.mtype = 2;
       printf("Type a message and hit enter to send. Use ^D to quit group");
+      pid_t pid = fork();
+      if (pid < 0) {
+        perror("fork failed");
+        exit(1);
+      } else if (pid == 0) {
+        signal(SIGQUIT, sigquit);
+        for (;;) {
+          if (msgrcv(clt.cmsqid, &(buf.mtype), sizeof(buf), 0, 0) == -1) {
+            perror("msgrcv");
+            exit(1);
+          }
+          if (buf.mtype == 3) {
+            printf("%s", buf.mtext);
+          }
+        }
+        // TODO: exit on signal
+      }
+      buf.mtype = 2;
       while (fgets(buf.mtext, MAX_MTEXT, stdin) != NULL) {
+        buf.mtext[strcspn(buf.mtext, "\n")] = 0;  // remove trailing newline char
         if (msgsnd(msqid, &(buf.mtype), sizeof(buf), 0) == -1) {
           perror("msgsnd");
-          continue;
         }
-        // TODO: send and recv messages
       }
+      kill(pid, SIGQUIT);
     }
   }
   // TODO: tell server

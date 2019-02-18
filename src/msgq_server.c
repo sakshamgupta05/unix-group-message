@@ -145,7 +145,7 @@ int main(void) {
           } else {
             (grp -> gmembers)[grp -> numMembers++] = clt;
             buf.mtype = 2;
-            sprintf(buf.mtext, "group (%s) joined successfully!", grp -> gname);
+            sprintf(buf.mtext, "%d$group (%s) joined successfully!", grp -> gid, grp -> gname);
             if (msgsnd(clt -> cmsqid, &(buf.mtype), sizeof(buf), 0) == -1){
               perror("msgsnd");
             }
@@ -162,7 +162,19 @@ int main(void) {
     } else if (buf.mtype == 2) {
       // type: chat
 
-      // TODO: chat
+      clt = clients[buf.cid];
+      grp = grps[buf.gid];
+      for (int i = 0; i < grp -> numMembers; i++) {
+        buf.mtype = 3;
+        char tmp[MAX_MTEXT];
+        strcpy(tmp, buf.mtext);
+        sprintf(buf.mtext, "[%s] %s", clt -> cname, tmp);
+        if (grp -> gmembers[i] -> cid != clt -> cid) {
+          if (msgsnd(clt -> cmsqid, &(buf.mtype), sizeof(buf), 0) == -1) {
+            perror("msgsnd");
+          }
+        }
+      }
     }
     printf("server: \"%s\"\n", buf.mtext);
   }

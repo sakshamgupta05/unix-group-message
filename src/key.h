@@ -8,6 +8,7 @@ struct my_msgbuf {
   long mtype;
   char mtext[MAX_MTEXT];
   int cid;
+  int gid;
 };
 
 #endif
