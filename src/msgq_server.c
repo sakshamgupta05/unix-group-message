@@ -34,10 +34,21 @@ int find_grp(char *gname) {
 }
 
 void list_groups(char *mtext) {
+  sprintf(mtext, "groups: ");
+  mtext += 8;
   for (int i = 0; i < num_grps; i++) {
     sprintf(mtext, "%s ", grps[i] -> gname);
     mtext += strlen(grps[i] -> gname) + 1;
   }
+}
+
+int find_client(char *cname) {
+  for (int i = 0; i < num_clients; i++) {
+    if (strcmp(cname, clients[i] -> cname) == 0) {
+      return i;
+    }
+  }
+  return -1;
 }
 
 int main(void) {
@@ -47,7 +58,7 @@ int main(void) {
 
   int msqid;
   key_t key;
-  if ((key = ftok(MSGQ_PATH, 'D')) == -1) {
+  if ((key = ftok(MSGQ_PATH, 'B')) == -1) {
     perror("ftok");
     exit(1);
   }
@@ -63,11 +74,23 @@ int main(void) {
     }
     if (buf.mtype == 1) {
       // type: hello from client
+      printf("[LOG] (%ld) login: \"%s\"\n", buf.mtype, buf.mtext);
 
       clt = malloc(sizeof(struct client));
       sscanf(buf.mtext, "%ld$%s", &(clt -> cmsqid), clt -> cname);
+      clt -> cid = find_client(clt -> cname);
 
-      if (num_clients >= MAX_CLIENTS) {
+      if (clt -> cid != -1) {
+        // existing user
+        buf.mtype = 1;
+        clients[clt -> cid] -> cmsqid = clt -> cmsqid;
+        sprintf(buf.mtext, "%d", clt -> cid);
+        if (msgsnd(clt -> cmsqid, &(buf.mtype), sizeof(buf), 0) == -1){
+          perror("msgsnd");
+        }
+        free(clt);
+      } else if (num_clients >= MAX_CLIENTS) {
+        // max clients limit reached
         buf.mtype = 2;
         strcpy(buf.mtext, "max clients limit reached");
         if (msgsnd(clt -> cmsqid, &(buf.mtype), sizeof(buf), 0) == -1){
@@ -75,6 +98,7 @@ int main(void) {
         }
         free(clt);
       } else {
+        // add new client
         buf.mtype = 1;
         clt -> cid = num_clients;
         sprintf(buf.mtext, "%d", clt -> cid);
@@ -85,9 +109,10 @@ int main(void) {
       }
     } else if (buf.mtype == 2) {
       // type: command
-
       clt = clients[buf.cid];
-      if (strncmp(buf.mtext, "crgrp ", 6) != 0) {
+      printf("[LOG] (%ld) cmd (c:%s): \"%s\"\n", buf.mtype, clt -> cname, buf.mtext);
+
+      if (strncmp(buf.mtext, "crgrp ", 6) == 0) {
         // command: create group
         char gname[MAX_GNAME];
         strcpy(gname, buf.mtext + 6);
@@ -116,14 +141,14 @@ int main(void) {
             perror("msgsnd");
           }
         }
-      } else if (strcmp(buf.mtext, "lsgrp") != 0) {
+      } else if (strcmp(buf.mtext, "lsgrp") == 0) {
         // command: list groups
         buf.mtype = 1;
         list_groups(buf.mtext);
         if (msgsnd(clt -> cmsqid, &(buf.mtype), sizeof(buf), 0) == -1) {
           perror("msgsnd");
         }
-      } else if (strncmp(buf.mtext, "jngrp ", 6) != 0) {
+      } else if (strncmp(buf.mtext, "jngrp ", 6) == 0) {
         // command: join group
         char gname[MAX_GNAME];
         strcpy(gname, buf.mtext + 6);
@@ -159,24 +184,25 @@ int main(void) {
           perror("msgsnd");
         }
       }
-    } else if (buf.mtype == 2) {
+    } else if (buf.mtype == 3) {
       // type: chat
-
       clt = clients[buf.cid];
       grp = grps[buf.gid];
+      printf("[LOG] (%ld) grp (c:%s)(g:%s): \"%s\"\n", buf.mtype, clt -> cname, grp -> gname, buf.mtext);
+
       for (int i = 0; i < grp -> numMembers; i++) {
         buf.mtype = 3;
         char tmp[MAX_MTEXT];
         strcpy(tmp, buf.mtext);
         sprintf(buf.mtext, "[%s] %s", clt -> cname, tmp);
+        // FIXME: [%s] getting printed multiple times
         if (grp -> gmembers[i] -> cid != clt -> cid) {
-          if (msgsnd(clt -> cmsqid, &(buf.mtype), sizeof(buf), 0) == -1) {
+          if (msgsnd(grp -> gmembers[i] -> cmsqid, &(buf.mtype), sizeof(buf), 0) == -1) {
             perror("msgsnd");
           }
         }
       }
     }
-    printf("server: \"%s\"\n", buf.mtext);
   }
   return 0;
 }

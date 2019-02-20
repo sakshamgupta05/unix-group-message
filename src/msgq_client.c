@@ -19,12 +19,11 @@ int main(void) {
   // establish connection with server
   int msqid;
   key_t key;
-  if ((key = ftok(MSGQ_PATH, 'D')) == -1) {
+  if ((key = ftok(MSGQ_PATH, 'B')) == -1) {
     perror("ftok");
     exit(1);
   }
-  // FIXME: remove IPC_CREAT
-  if ((msqid = msgget(key, IPC_CREAT | 0644)) == -1) {
+  if ((msqid = msgget(key, 0)) == -1) {
     perror("msgget");
     exit(1);
   }
@@ -61,10 +60,11 @@ int main(void) {
   }
 
   // start communication with server (command mode)
-  buf.mtype = 2;
   printf("Enter commands (crgrp, lsgrp, jngrp), ^D to quit:\n");
+  fgets(buf.mtext, MAX_MTEXT, stdin);
   while (fgets(buf.mtext, MAX_MTEXT, stdin) != NULL) {
     buf.mtext[strcspn(buf.mtext, "\n")] = 0;  // remove trailing newline char
+    buf.mtype = 2;
     if (msgsnd(msqid, &(buf.mtype), sizeof(buf), 0) == -1) {
       perror("msgsnd");
       continue;
@@ -80,7 +80,7 @@ int main(void) {
       printf("%s\n", buf.mtext);
 
       // start communication with server (chat mode)
-      printf("Type a message and hit enter to send. Use ^D to quit group");
+      printf("Type a message and hit enter to send. Use '$quit' to quit group\n");
       pid_t pid = fork();
       if (pid < 0) {
         perror("fork failed");
@@ -93,22 +93,22 @@ int main(void) {
             exit(1);
           }
           if (buf.mtype == 3) {
-            printf("%s", buf.mtext);
+            printf("%s\n", buf.mtext);
           }
         }
-        // TODO: exit on signal
       }
-      buf.mtype = 2;
       while (fgets(buf.mtext, MAX_MTEXT, stdin) != NULL) {
         buf.mtext[strcspn(buf.mtext, "\n")] = 0;  // remove trailing newline char
+        if (strcmp(buf.mtext, "$quit") == 0) break;
+        buf.mtype = 3;
         if (msgsnd(msqid, &(buf.mtype), sizeof(buf), 0) == -1) {
           perror("msgsnd");
         }
       }
       kill(pid, SIGQUIT);
+      printf("Enter commands (crgrp, lsgrp, jngrp), ^D to quit:\n");
     }
   }
-  // TODO: tell server
   if (msgctl(clt.cmsqid, IPC_RMID, NULL) == -1) {
     perror("msgctl");
     exit(1);
