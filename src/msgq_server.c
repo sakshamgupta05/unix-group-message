@@ -77,7 +77,7 @@ int main(void) {
       printf("[LOG] (%ld) login: \"%s\"\n", buf.mtype, buf.mtext);
 
       clt = malloc(sizeof(struct client));
-      sscanf(buf.mtext, "%ld$%s", &(clt -> cmsqid), clt -> cname);
+      sscanf(buf.mtext, "%ld$%[^\n]", &(clt -> cmsqid), clt -> cname);
       clt -> cid = find_client(clt -> cname);
 
       if (clt -> cid != -1) {

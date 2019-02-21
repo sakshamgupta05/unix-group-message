@@ -77,7 +77,7 @@ int main(void) {
     if (buf.mtype == 1) {
       printf("%s\n", buf.mtext);
     } else if (buf.mtype == 2) {
-      sscanf(buf.mtext, "%d$%s", &(buf.gid), buf.mtext);
+      sscanf(buf.mtext, "%d$%[^\n]", &(buf.gid), buf.mtext);
       printf("%s\n", buf.mtext);
 
       // start communication with server (chat mode)
