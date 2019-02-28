@@ -9,10 +9,6 @@
 #include "key.h"
 #include "client.h"
 
-void sigquit() { 
-    exit(0); 
-} 
-
 int main(void) {
   struct my_msgbuf buf;
   struct client clt;
@@ -87,7 +83,6 @@ int main(void) {
         perror("fork failed");
         exit(1);
       } else if (pid == 0) {
-        signal(SIGQUIT, sigquit);
         for (;;) {
           if (msgrcv(clt.cmsqid, &(buf.mtype), sizeof(buf), 0, 0) == -1) {
             perror("msgrcv");
@@ -106,7 +101,7 @@ int main(void) {
           perror("msgsnd");
         }
       }
-      kill(pid, SIGQUIT);
+      kill(pid, SIGKILL);
       printf("Enter commands (crgrp, lsgrp, jngrp), ^D to quit:\n");
     }
   }
