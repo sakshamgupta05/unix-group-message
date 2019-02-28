@@ -190,12 +190,12 @@ int main(void) {
       grp = grps[buf.gid];
       printf("[LOG] (%ld) grp (c:%s)(g:%s): \"%s\"\n", buf.mtype, clt -> cname, grp -> gname, buf.mtext);
 
+      buf.mtype = 3;
+      char tmp[MAX_MTEXT];
+      strcpy(tmp, buf.mtext);
+      sprintf(buf.mtext, "[%s] %s", clt -> cname, tmp);
+
       for (int i = 0; i < grp -> numMembers; i++) {
-        buf.mtype = 3;
-        char tmp[MAX_MTEXT];
-        strcpy(tmp, buf.mtext);
-        sprintf(buf.mtext, "[%s] %s", clt -> cname, tmp);
-        // FIXME: [%s] getting printed multiple times
         if (grp -> gmembers[i] -> cid != clt -> cid) {
           if (msgsnd(grp -> gmembers[i] -> cmsqid, &(buf.mtype), sizeof(buf), 0) == -1) {
             perror("msgsnd");
