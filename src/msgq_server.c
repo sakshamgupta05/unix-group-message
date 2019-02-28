@@ -72,7 +72,7 @@ int main(void) {
       perror("msgrcv");
       exit(1);
     }
-    if (buf.mtype == 1) {
+    if (buf.mtype == TP_HELLO) {
       // type: hello from client
       printf("[LOG] (%ld) login: \"%s\"\n", buf.mtype, buf.mtext);
 
@@ -82,7 +82,7 @@ int main(void) {
 
       if (clt -> cid != -1) {
         // existing user
-        buf.mtype = 1;
+        buf.err = 0;
         clients[clt -> cid] -> cmsqid = clt -> cmsqid;
         sprintf(buf.mtext, "%d", clt -> cid);
         if (msgsnd(clt -> cmsqid, &(buf.mtype), sizeof(buf), 0) == -1){
@@ -91,7 +91,7 @@ int main(void) {
         free(clt);
       } else if (num_clients >= MAX_CLIENTS) {
         // max clients limit reached
-        buf.mtype = 2;
+        buf.err = 1;
         strcpy(buf.mtext, "max clients limit reached");
         if (msgsnd(clt -> cmsqid, &(buf.mtype), sizeof(buf), 0) == -1){
           perror("msgsnd");
@@ -99,7 +99,7 @@ int main(void) {
         free(clt);
       } else {
         // add new client
-        buf.mtype = 1;
+        buf.err = 0;
         clt -> cid = num_clients;
         sprintf(buf.mtext, "%d", clt -> cid);
         clients[num_clients++] = clt;
@@ -107,90 +107,87 @@ int main(void) {
           perror("msgsnd");
         }
       }
-    } else if (buf.mtype == 2) {
-      // type: command
+    } else if (buf.mtype == TP_CRGRP) {
+      // type: create group
       clt = clients[buf.cid];
       printf("[LOG] (%ld) cmd (c:%s): \"%s\"\n", buf.mtype, clt -> cname, buf.mtext);
 
-      if (strncmp(buf.mtext, "crgrp ", 6) == 0) {
-        // command: create group
-        char gname[MAX_GNAME];
-        strcpy(gname, buf.mtext + 6);
-        if (find_grp(gname) != -1) {
-          buf.mtype = 1;
-          strcpy(buf.mtext, "error: group already present");
-          if (msgsnd(clt -> cmsqid, &(buf.mtype), sizeof(buf), 0) == -1) {
-            perror("msgsnd");
-          }
-        } else if (num_grps >= MAX_GRPS) {
-          buf.mtype = 1;
-          strcpy(buf.mtext, "error: max groups limit reached");
-          if (msgsnd(clt -> cmsqid, &(buf.mtype), sizeof(buf), 0) == -1){
-            perror("msgsnd");
-          }
-        } else {
-          grp = malloc(sizeof(struct msg_grp));
-          strcpy(grp -> gname, gname);
-          grp -> numMembers = 0;
-          grp -> gid = num_grps;
-          grps[num_grps++] = grp;
-
-          buf.mtype = 1;
-          strcpy(buf.mtext, "success: group created");
-          if (msgsnd(clt -> cmsqid, &(buf.mtype), sizeof(buf), 0) == -1) {
-            perror("msgsnd");
-          }
-        }
-      } else if (strcmp(buf.mtext, "lsgrp") == 0) {
-        // command: list groups
-        buf.mtype = 1;
-        list_groups(buf.mtext);
+      char gname[MAX_GNAME];
+      strcpy(gname, buf.mtext + 6);
+      if (find_grp(gname) != -1) {
+        buf.err = 1;
+        strcpy(buf.mtext, "error: group already present");
         if (msgsnd(clt -> cmsqid, &(buf.mtype), sizeof(buf), 0) == -1) {
           perror("msgsnd");
         }
-      } else if (strncmp(buf.mtext, "jngrp ", 6) == 0) {
-        // command: join group
-        char gname[MAX_GNAME];
-        strcpy(gname, buf.mtext + 6);
-        int gid = find_grp(gname);
-        if (gid == -1) {
-          buf.mtype = 1;
-          strcpy(buf.mtext, "error: group not present");
-          if (msgsnd(clt -> cmsqid, &(buf.mtype), sizeof(buf), 0) == -1) {
-            perror("msgsnd");
-          }
-        } else {
-          grp = grps[gid];
-          if (grp -> numMembers >= MAX_GMEMBERS) {
-            buf.mtype = 1;
-            strcpy(buf.mtext, "error: max members in group limit reached");
-            if (msgsnd(clt -> cmsqid, &(buf.mtype), sizeof(buf), 0) == -1){
-              perror("msgsnd");
-            }
-          } else {
-            (grp -> gmembers)[grp -> numMembers++] = clt;
-            buf.mtype = 2;
-            sprintf(buf.mtext, "%d$group (%s) joined successfully!", grp -> gid, grp -> gname);
-            if (msgsnd(clt -> cmsqid, &(buf.mtype), sizeof(buf), 0) == -1){
-              perror("msgsnd");
-            }
-          }
+      } else if (num_grps >= MAX_GRPS) {
+        buf.err = 1;
+        strcpy(buf.mtext, "error: max groups limit reached");
+        if (msgsnd(clt -> cmsqid, &(buf.mtype), sizeof(buf), 0) == -1){
+          perror("msgsnd");
         }
       } else {
-        // invalid command
-        buf.mtype = 1;
-        strcpy(buf.mtext, "error: invalid command");
+        grp = malloc(sizeof(struct msg_grp));
+        strcpy(grp -> gname, gname);
+        grp -> numMembers = 0;
+        grp -> gid = num_grps;
+        grps[num_grps++] = grp;
+
+        buf.err = 0;
+        strcpy(buf.mtext, "success: group created");
         if (msgsnd(clt -> cmsqid, &(buf.mtype), sizeof(buf), 0) == -1) {
           perror("msgsnd");
         }
       }
-    } else if (buf.mtype == 3) {
+    } else if (buf.mtype == TP_LSGRP) {
+      // type: list group
+      clt = clients[buf.cid];
+      printf("[LOG] (%ld) cmd (c:%s): \"%s\"\n", buf.mtype, clt -> cname, buf.mtext);
+
+      buf.err = 0;
+      list_groups(buf.mtext);
+      if (msgsnd(clt -> cmsqid, &(buf.mtype), sizeof(buf), 0) == -1) {
+        perror("msgsnd");
+      }
+    } else if (buf.mtype == TP_JNGRP) {
+      // type: join group
+      clt = clients[buf.cid];
+      printf("[LOG] (%ld) cmd (c:%s): \"%s\"\n", buf.mtype, clt -> cname, buf.mtext);
+
+      char gname[MAX_GNAME];
+      strcpy(gname, buf.mtext + 6);
+      int gid = find_grp(gname);
+      if (gid == -1) {
+        buf.err = 1;
+        strcpy(buf.mtext, "error: group not present");
+        if (msgsnd(clt -> cmsqid, &(buf.mtype), sizeof(buf), 0) == -1) {
+          perror("msgsnd");
+        }
+      } else {
+        grp = grps[gid];
+        if (grp -> numMembers >= MAX_GMEMBERS) {
+          buf.err = 1;
+          strcpy(buf.mtext, "error: max members in group limit reached");
+          if (msgsnd(clt -> cmsqid, &(buf.mtype), sizeof(buf), 0) == -1){
+            perror("msgsnd");
+          }
+        } else {
+          (grp -> gmembers)[grp -> numMembers++] = clt;
+          buf.err = 0;
+          sprintf(buf.mtext, "group (%s) joined successfully!", grp -> gname);
+          buf.gid = grp -> gid;
+          if (msgsnd(clt -> cmsqid, &(buf.mtype), sizeof(buf), 0) == -1){
+            perror("msgsnd");
+          }
+        }
+      }
+    } else if (buf.mtype == TP_CHAT) {
       // type: chat
       clt = clients[buf.cid];
       grp = grps[buf.gid];
       printf("[LOG] (%ld) grp (c:%s)(g:%s): \"%s\"\n", buf.mtype, clt -> cname, grp -> gname, buf.mtext);
 
-      buf.mtype = 3;
+      buf.err = 0;
       char tmp[MAX_MTEXT];
       strcpy(tmp, buf.mtext);
       sprintf(buf.mtext, "[%s] %s", clt -> cname, tmp);

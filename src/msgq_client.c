@@ -35,19 +35,19 @@ int main(void) {
   }
 
   // server handshake
-  buf.mtype = 1;
+  buf.mtype = TP_HELLO;
   sprintf(buf.mtext, "%ld$%s", clt.cmsqid, clt.cname);
   if (msgsnd(msqid, &(buf.mtype), sizeof(buf), 0) == -1) {
     perror("msgsnd");
     msgctl(msqid, IPC_RMID, NULL);
     exit(1);
   }
-  if (msgrcv(clt.cmsqid, &(buf.mtype), sizeof(buf), 0, 0) == -1) {
+  if (msgrcv(clt.cmsqid, &(buf.mtype), sizeof(buf), TP_HELLO, 0) == -1) {
     perror("msgrcv");
     msgctl(msqid, IPC_RMID, NULL);
     exit(1);
   }
-  if (buf.mtype != 1) {
+  if (buf.err) {
     printf("server handshake error: %s", buf.mtext);
     exit(1);
   } else {
@@ -61,21 +61,30 @@ int main(void) {
   fgets(buf.mtext, MAX_MTEXT, stdin);
   while (fgets(buf.mtext, MAX_MTEXT, stdin) != NULL) {
     buf.mtext[strcspn(buf.mtext, "\n")] = 0;  // remove trailing newline char
-    buf.mtype = 2;
+
+    // identify command
+    if (strncmp(buf.mtext, "crgrp ", 6) == 0) {
+      buf.mtype = TP_CRGRP;
+    } else if (strcmp(buf.mtext, "lsgrp") == 0) {
+      buf.mtype = TP_LSGRP;
+    } else if (strncmp(buf.mtext, "jngrp ", 6) == 0) {
+      buf.mtype = TP_JNGRP;
+    } else {
+      printf("error: invalid command\n");
+      continue;
+    }
+
+    // send command
     if (msgsnd(msqid, &(buf.mtype), sizeof(buf), 0) == -1) {
       perror("msgsnd");
       continue;
     }
-    if (msgrcv(clt.cmsqid, &(buf.mtype), sizeof(buf), 0, 0) == -1) {
+    if (msgrcv(clt.cmsqid, &(buf.mtype), sizeof(buf), buf.mtype, 0) == -1) {
       perror("msgrcv");
       continue;
     }
-    if (buf.mtype == 1) {
-      printf("%s\n", buf.mtext);
-    } else if (buf.mtype == 2) {
-      sscanf(buf.mtext, "%d$%[^\n]", &(buf.gid), buf.mtext);
-      printf("%s\n", buf.mtext);
-
+    printf("%s\n", buf.mtext);
+    if (buf.mtype == TP_JNGRP && !buf.err) {
       // start communication with server (chat mode)
       printf("Type a message and hit enter to send. Use '$quit' to quit group\n");
       pid_t pid = fork();
@@ -84,19 +93,17 @@ int main(void) {
         exit(1);
       } else if (pid == 0) {
         for (;;) {
-          if (msgrcv(clt.cmsqid, &(buf.mtype), sizeof(buf), 0, 0) == -1) {
+          if (msgrcv(clt.cmsqid, &(buf.mtype), sizeof(buf), TP_CHAT, 0) == -1) {
             perror("msgrcv");
             exit(1);
           }
-          if (buf.mtype == 3) {
-            printf("%s\n", buf.mtext);
-          }
+          printf("%s\n", buf.mtext);
         }
       }
       while (fgets(buf.mtext, MAX_MTEXT, stdin) != NULL) {
         buf.mtext[strcspn(buf.mtext, "\n")] = 0;  // remove trailing newline char
         if (strcmp(buf.mtext, "$quit") == 0) break;
-        buf.mtype = 3;
+        buf.mtype = TP_CHAT;
         if (msgsnd(msqid, &(buf.mtype), sizeof(buf), 0) == -1) {
           perror("msgsnd");
         }
