@@ -51,6 +51,16 @@ int find_client(char *cname) {
   return -1;
 }
 
+int gmember(int gid, int cid) {
+  struct msg_grp *grp = grps[gid];
+  for (int i = 0; i < grp -> numMembers; i++) {
+    if ((grp -> gmembers)[i] -> cid == cid) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
 int main(void) {
   struct my_msgbuf buf;
   struct client *clt;
@@ -165,7 +175,14 @@ int main(void) {
         }
       } else {
         grp = grps[gid];
-        if (grp -> numMembers >= MAX_GMEMBERS) {
+        if (gmember(grp -> gid, clt -> cid)) {
+          buf.err = 0;
+          sprintf(buf.mtext, "group (%s)", grp -> gname);
+          buf.gid = grp -> gid;
+          if (msgsnd(clt -> cmsqid, &(buf.mtype), sizeof(buf), 0) == -1){
+            perror("msgsnd");
+          }
+        } else if (grp -> numMembers >= MAX_GMEMBERS) {
           buf.err = 1;
           strcpy(buf.mtext, "error: max members in group limit reached");
           if (msgsnd(clt -> cmsqid, &(buf.mtype), sizeof(buf), 0) == -1){
